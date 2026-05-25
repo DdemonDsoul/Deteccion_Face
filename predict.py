@@ -1,3 +1,4 @@
+#esteban es omosexual
 from tensorflow.keras.models import load_model
 from PIL import Image
 import numpy as np
