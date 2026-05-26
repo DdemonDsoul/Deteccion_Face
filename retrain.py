@@ -37,21 +37,23 @@ def entrenar_unicamente_fallos(nombre, carpeta_correcciones, carpeta_final_histo
     
     gen = ImageDataGenerator(rescale=1./255, rotation_range=10, zoom_range=0.1, horizontal_flip=True)
     
+    # --- LA CORRECCIÓN CLAVE ESTÁ AQUÍ ---
+    # Al pasar 'classes=clases_fijas', obligamos a Keras a generar un vector de tamaño 7,
+    # aunque físicamente solo existan fotos dentro de 3 de las subcarpetas.
     train_data = gen.flow_from_directory(
         carpeta_correcciones,
         target_size=(IMG_SIZE, IMG_SIZE),
         batch_size=min(BATCH_SIZE, total_fotos),
         class_mode="categorical",
-        classes=clases_fijas
+        classes=clases_fijas  # <--- Esto fuerza que target.shape sea (None, 7)
     )
     
-    # Entrenar el modelo
+    # Entrenar el modelo de forma segura sin choques de dimensiones
     modelo.fit(train_data, epochs=EPOCHS, verbose=1)
     
     # Guardar sobreescribiendo el modelo del núcleo
     modelo.save(f"modelo/{nombre}.keras")
     print(f"✅ [OK] Modelo '{nombre}' actualizado en el almacenamiento físico.")
 
-    # --- NUEVO AJUSTE: BLOQUE DE BORRADO ELIMINADO ---
     print(f"📌 [CONSERVADO] Imágenes protegidas en '{carpeta_correcciones}' para el reentrenamiento acumulativo.")
     return True
