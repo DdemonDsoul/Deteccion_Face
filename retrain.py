@@ -1,233 +1,57 @@
+import os
+import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.models import load_model
-import os
+from tensorflow.keras.optimizers import Adam
 
+# Hiperparámetros optimizados para forzar cambios drásticos en caliente
 IMG_SIZE = 128
-BATCH_SIZE = 32
-EPOCHS = 5
+BATCH_SIZE = 4 
+EPOCHS = 15           # <-- Sido incrementado de 3 a 15 para machacar más veces el error
+LEARNING_RATE = 1e-3  # <-- Configuración más agresiva para alterar los pesos con fuerza
 
-# =========================
-# REENTRENAR EDAD
-# =========================
+def contar_imagenes(carpeta):
+    if not os.path.exists(carpeta): 
+        return 0
+    total = 0
+    for subcarpeta in os.listdir(carpeta):
+        ruta_sub = os.path.join(carpeta, subcarpeta)
+        if os.path.isdir(ruta_sub):
+            total += len([f for f in os.listdir(ruta_sub) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))])
+    return total
 
-print("\nReentrenando EDAD...")
+def entrenar_unicamente_fallos(nombre, carpeta_correcciones, carpeta_final_historico, clases_fijas):
+    total_fotos = contar_imagenes(carpeta_correcciones)
+    
+    if total_fotos == 0:
+        print(f"ℹ️ [MODELO {nombre.upper()}]: Sin fallos nuevos en '{carpeta_correcciones}'. Saltando...")
+        return False
 
-generador_edad = ImageDataGenerator(
-
-    rescale=1./255,
-
-    validation_split=0.2,
-
-    rotation_range=10,
-
-    zoom_range=0.1,
-
-    horizontal_flip=True
-
-)
-
-edad_train = generador_edad.flow_from_directory(
-
-    "datasets/edades",
-
-    target_size=(IMG_SIZE,IMG_SIZE),
-
-    batch_size=BATCH_SIZE,
-
-    class_mode="categorical",
-
-    subset="training"
-
-)
-
-edad_val = generador_edad.flow_from_directory(
-
-    "datasets/edades",
-
-    target_size=(IMG_SIZE,IMG_SIZE),
-
-    batch_size=BATCH_SIZE,
-
-    class_mode="categorical",
-
-    subset="validation"
-
-)
-
-# Agregar correcciones
-if os.path.exists("correcciones/edad"):
-
-    edad_extra = generador_edad.flow_from_directory(
-
-        "correcciones/edad",
-
-        target_size=(IMG_SIZE,IMG_SIZE),
-
-        batch_size=BATCH_SIZE,
-
+    print(f"\n⚡ [START] Reentrenando {nombre} con {total_fotos} imágenes corregidas.")
+    
+    # Cargar el modelo base
+    modelo = load_model(f"modelo/{nombre}.keras")
+    
+    # Compilación usando el nuevo ritmo de aprendizaje más veloz
+    modelo.compile(optimizer=Adam(learning_rate=LEARNING_RATE), loss='categorical_crossentropy', metrics=['accuracy'])
+    
+    gen = ImageDataGenerator(rescale=1./255, rotation_range=10, zoom_range=0.1, horizontal_flip=True)
+    
+    train_data = gen.flow_from_directory(
+        carpeta_correcciones,
+        target_size=(IMG_SIZE, IMG_SIZE),
+        batch_size=min(BATCH_SIZE, total_fotos),
         class_mode="categorical",
-
-        shuffle=True
-
+        classes=clases_fijas
     )
-
-else:
-
-    edad_extra = None
-
-modelo_edad = load_model(
-
-    "modelo/edad.keras"
-
-)
-
-if edad_extra:
-
-    modelo_edad.fit(
-
-        edad_extra,
-
-        epochs=EPOCHS
-
-    )
-
-modelo_edad.fit(
-
-    edad_train,
-
-    validation_data=edad_val,
-
-    epochs=EPOCHS
-
-)
-
-modelo_edad.save(
-
-    "modelo/edad.keras"
-
-)
-
-print(
-
-"Edad actualizada"
-
-)
-
-# =========================
-# REENTRENAR EMOCION
-# =========================
-
-print(
-
-"\nReentrenando EMOCIONES..."
-
-)
-
-generador_emo = ImageDataGenerator(
-
-    rescale=1./255,
-
-    validation_split=0.2,
-
-    rotation_range=10,
-
-    zoom_range=0.1,
-
-    horizontal_flip=True
-
-)
-
-emo_train = generador_emo.flow_from_directory(
-
-    "datasets/emociones_procesado",
-
-    target_size=(IMG_SIZE,IMG_SIZE),
-
-    batch_size=BATCH_SIZE,
-
-    class_mode="categorical",
-
-    subset="training"
-
-)
-
-emo_val = generador_emo.flow_from_directory(
-
-    "datasets/emociones_procesado",
-
-    target_size=(IMG_SIZE,IMG_SIZE),
-
-    batch_size=BATCH_SIZE,
-
-    class_mode="categorical",
-
-    subset="validation"
-
-)
-
-if os.path.exists(
-
-    "correcciones/emocion"
-
-):
-
-    emo_extra = generador_emo.flow_from_directory(
-
-        "correcciones/emocion",
-
-        target_size=(IMG_SIZE,IMG_SIZE),
-
-        batch_size=BATCH_SIZE,
-
-        class_mode="categorical",
-
-        shuffle=True
-
-    )
-
-else:
-
-    emo_extra=None
-
-modelo_emo = load_model(
-
-    "modelo/emocion.keras"
-
-)
-
-if emo_extra:
-
-    modelo_emo.fit(
-
-        emo_extra,
-
-        epochs=EPOCHS
-
-    )
-
-modelo_emo.fit(
-
-    emo_train,
-
-    validation_data=emo_val,
-
-    epochs=EPOCHS
-
-)
-
-modelo_emo.save(
-
-    "modelo/emocion.keras"
-
-)
-
-print(
-
-"Emociones actualizadas"
-
-)
-
-print(
-
-"\nIA reentrenada correctamente"
-)
+    
+    # Entrenar el modelo
+    modelo.fit(train_data, epochs=EPOCHS, verbose=1)
+    
+    # Guardar sobreescribiendo el modelo del núcleo
+    modelo.save(f"modelo/{nombre}.keras")
+    print(f"✅ [OK] Modelo '{nombre}' actualizado en el almacenamiento físico.")
+
+    # --- NUEVO AJUSTE: BLOQUE DE BORRADO ELIMINADO ---
+    print(f"📌 [CONSERVADO] Imágenes protegidas en '{carpeta_correcciones}' para el reentrenamiento acumulativo.")
+    return True
